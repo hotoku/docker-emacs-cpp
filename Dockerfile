@@ -1,41 +1,73 @@
-FROM alpine:3.14.0
+FROM alpine:latest
 
-RUN apk update && \
-    apk add \
-    emacs \
-    tmux
+MAINTAINER davido
 
-RUN apk add git
-RUN apk add openssh
+ENV BAZEL_VERSION 0.13.0
+ENV JAVA_HOME /usr/lib/jvm/java-1.8-openjdk
 
+RUN apk add --no-cache --virtual=.build-deps \
+    coreutils \
+    ca-certificates \
+    wget \
+    git \
+    go \
+    perl \
+    python \
+    python-dev \
+    nodejs \
+    nodejs-npm \
+    openssh \
+    bash \
+    curl \
+    g++ \
+    musl-dev \
+    openjdk8 \
+    sudo \
+    sed \
+    zip \
+    libarchive \
+    unzip \
+    \
+    && ln -s /usr/lib/jvm/java-1.8-openjdk/bin/javac /usr/bin \
+    && ln -s /usr/lib/jvm/java-1.8-openjdk/bin/jar /usr/bin \
+    \
+    && wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://raw.githubusercontent.com/sgerrand/alpine-pkg-glibc/master/sgerrand.rsa.pub \
+    && wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.26-r0/glibc-2.26-r0.apk \
+    && apk add glibc-2.26-r0.apk \
+    \
+    && wget -q -O /etc/apk/keys/david@ostrovsky.org-5a0369d6.rsa.pub https://raw.githubusercontent.com/davido/bazel-alpine-package/master/david@ostrovsky.org-5a0369d6.rsa.pub \
+    && wget https://github.com/davido/bazel-alpine-package/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-r0.apk \
+    && apk add bazel-${BAZEL_VERSION}-r0.apk \
+    \
+    && npm config set user 0 \
+    && npm config set unsafe-perm true \
+    && npm install -g \
+    eslint \
+    eslint-config-google \
+    eslint-plugin-html \
+    typescript \
+    fried-twinkie \
+    polylint \
+    web-component-tester \
+    \
+    && adduser -D builder -s /bin/bash \
+    && echo "builder    ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-ARG bazel_ver=1.0.0
+COPY .* /home/builder/
+RUN chown builder:builder /home/builder/.*
 
-ENV JAVA_HOME=/usr/lib/jvm/default-jvm \
-    PATH="$JAVA_HOME/bin:${PATH}" \
-    BAZEL_VERSION=1.0.0
+RUN mkdir -p /home/builder/.gerritcodereview/bazel-cache/cas \
+    && mkdir -p /home/builder/.gerritcodereview/bazel-cache/repository \
+    && mkdir -p /home/builder/.gerritcodereview/buck-cache/downloaded-artifacts
 
+USER builder
 
-RUN apk add --virtual .bazel_build --no-cache g++ gcc \
-  bash zip unzip cmake make linux-headers openjdk8 && \
-  wget -q "https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-dist.zip" \
-  -O bazel.zip && \
-  mkdir "bazel-${BAZEL_VERSION}" && \
-  unzip -qd "bazel-${BAZEL_VERSION}" bazel.zip && \
-  rm bazel.zip && \
-  cd "bazel-${BAZEL_VERSION}" && \
-  sed -i -e '/#endif  \/\/ _WIN32/{h;s//#else/;G;s//#include <sys\/stat.h>/;G;}' third_party/ijar/common.h && \
-  sed -i -e 's/-classpath/-J-Xmx6096m -J-Xms128m -classpath/g' scripts/bootstrap/compile.sh 
+RUN mkdir -p /home/builder/gerrit
 
-RUN apk add python3
+WORKDIR /home/builder/gerrit
 
-RUN cd "bazel-${BAZEL_VERSION}" && \
-    EXTRA_BAZEL_ARGS=--host_javabase=@local_jdk//:jdk ./compile.sh
+# Extract instaled bazel version (warm up bazel installation)
+# TODO(davido): check why this is causing problem with rules_closur
+RUN bazel version
 
-RUN cp -p output/bazel /usr/bin/ && \
-  cd ../ && rm -rf "bazel-${BAZEL_VERSION}" && \
-  bazel version && \
-  apk del --purge .bazel_build
-
-
-WORKDIR /root
+ENTRYPOINT ["bash"]
