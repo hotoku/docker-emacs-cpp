@@ -27,6 +27,8 @@ RUN apk add --virtual .bazel_build --no-cache g++ gcc \
   sed -i -e '/#endif  \/\/ _WIN32/{h;s//#else/;G;s//#include <sys\/stat.h>/;G;}' third_party/ijar/common.h && \
   sed -i -e 's/-classpath/-J-Xmx6096m -J-Xms128m -classpath/g' scripts/bootstrap/compile.sh 
 
+RUN apk add python3
+
 RUN cd "bazel-${BAZEL_VERSION}" && \
     EXTRA_BAZEL_ARGS=--host_javabase=@local_jdk//:jdk ./compile.sh
 
